@@ -1,0 +1,19 @@
+# Credenciais e configurações privadas
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Arquivos temporários e do sistema
+Thumbs.db
+Desktop.ini
+.DS_Store
+~$*
+*.tmp
+
+# Dependências e caches
+node_modules/
+__pycache__/
+.venv/
+venv/
