@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEBUG - GPS Tracker</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        #info-panel {
+            position: absolute; top: 10px; left: 10px; z-index: 1000;
+            background: white; padding: 15px; border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3); width: 280px;
+        }
+        .status-box { 
+            margin-top: 10px; padding: 8px; border-radius: 4px; 
+            font-size: 12px; font-weight: bold; line-height: 1.4;
+        }
+        .error { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .debug-msg { font-family: monospace; font-size: 10px; margin-top: 5px; color: #555; display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="info-panel">
+        <b style="font-size: 16px;">📍 Debug Rastreador</b>
+        <div style="margin-top:10px;">
+            Lat: <span id="lat" style="font-weight:bold; color:blue;">---</span><br>
+            Lng: <span id="lng" style="font-weight:bold; color:blue;">---</span>
+        </div>
+        
+        <div id="status-container" class="status-box">Iniciando...</div>
+        <small id="debug-detail" class="debug-msg"></small>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // --- INSIRA SUAS CREDENCIAIS AQUI ---
+        const SUPABASE_URL = 'https://zonxcbilowxanhdjocou.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvbnhjYmlsb3d4YW5oZGpvY291Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MzI1NjUsImV4cCI6MjA5MjQwODU2NX0.6V932q0-2EwTzmgcJbZkLBq0gLANwc_4jfSQGVpWuPo'; // <--- Troque pela sua ANON KEY
+
+        let supabaseClient;
+        let map, marker;
+
+        function log(msg, isError = false, detail = "") {
+            const container = document.getElementById('status-container');
+            const debugDetail = document.getElementById('debug-detail');
+            
+            container.innerText = msg;
+            container.className = isError ? "status-box error" : "status-box success";
+            debugDetail.innerText = detail ? "Detalhe técnico: " + detail : "";
+            console.log(`[DEBUG] ${msg}`, detail);
+        }
+
+        async function init() {
+            // 1. Validar inicialização
+            try {
+                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                log("Supabase inicializado.");
+            } catch (e) {
+                log("Erro na configuração das chaves!", true, e.message);
+                return;
+            }
+
+            // 2. Configurar Mapa
+            map = L.map('map').setView([-29.4373, -51.9867], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            marker = L.marker([-29.4373, -51.9867]).addTo(map);
+
+            // 3. Buscar dados
+            fetchLastPosition();
+            subscribeToChanges();
+        }
+
+        async function fetchLastPosition() {
+            log("Conectando à tabela Table1...");
+            
+            const { data, error } = await supabaseClient
+                .from('Table1')
+                .select('latitude, longitude')
+                .order('id', { ascending: false })
+                .limit(1);
+
+            if (error) {
+                // Aqui capturamos o erro exato do Supabase
+                log("Erro ao carregar banco!", true, `${error.code}: ${error.message} (${error.hint || 'Sem dica'})`);
+                return;
+            }
+
+            if (data && data.length > 0) {
+                log("Dados recebidos com sucesso!", false);
+                updateUI(data[0].latitude, data[0].longitude);
+            } else {
+                log("Conectado, mas a tabela está VAZIA.", false, "Certifique-se que o ESP32 já enviou dados.");
+            }
+        }
+
+        function subscribeToChanges() {
+            supabaseClient
+                .channel('gps-test')
+                .on('postgres_changes', 
+                    { event: 'INSERT', schema: 'public', table: 'Table1' }, 
+                    (payload) => {
+                        log("Novo dado recebido em tempo real!");
+                        updateUI(payload.new.latitude, payload.new.longitude);
+                    }
+                )
+                .subscribe((status) => {
+                    console.log("Status Realtime:", status);
+                });
+        }
+
+        function updateUI(lat, lng) {
+            const latNum = parseFloat(lat);
+            const lngNum = parseFloat(lng);
+
+            if (!isNaN(latNum) && !isNaN(lngNum)) {
+                marker.setLatLng([latNum, lngNum]);
+                map.panTo([latNum, lngNum]);
+                document.getElementById('lat').innerText = latNum.toFixed(6);
+                document.getElementById('lng').innerText = lngNum.toFixed(6);
+            } else {
+                log("Erro nos dados recebidos", true, `Recebido: lat=${lat}, lng=${lng}`);
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

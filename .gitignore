@@ -17,3 +17,7 @@ node_modules/
 __pycache__/
 .venv/
 venv/
+
+# Testes com credenciais locais de Wi-Fi
+/Código/ESP32/Testes/TESTE_ATGM336H/TESTE_ATGM336H.ino
+/Código/ESP32/Testes/TESTE_ESP/TESTE_ESP.ino
